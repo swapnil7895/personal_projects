@@ -9,11 +9,21 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 import logging
+import configparser
+from job_apply_lib import *
 
 # Set up basic configuration
 # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.info("This log will be saved to a file.")
+
+# Create a config parser object
+config = configparser.ConfigParser()
+
+# Read the configuration file
+config.read('job_apply.conf')
+
+keywords_to_search = config["job_apply_config"]["keywords_job_search"]
+logging.info(f"Keywords to search for job - {keywords_to_search}")
 
 
 print("start")
@@ -57,7 +67,6 @@ try:
 
     driver.find_element(By.XPATH, r'//*[text() = "Search jobs here"]').click()       
     logging.info("Clicked on 'Search jobs here' button") 
-    keywords_to_search = "Python selenium"
     driver.find_element(By.XPATH, r'//*[@placeholder = "Enter keyword / designation / companies" ]').send_keys(f"{keywords_to_search}")
     logging.info(f"Entered text '{keywords_to_search}'") 
     driver.find_element(By.XPATH, r'//*[@placeholder = "Enter keyword / designation / companies" ]').send_keys(Keys.ENTER)
@@ -86,58 +95,73 @@ try:
             # all_jobs_on_page_el2 = driver.find_elements(By.XPATH, r'//div[ @class = "srp-jobtuple-wrapper"]')
             # title = all_jobs_on_page_el2[i].find_element(By.XPATH, r"//*[ @class = ' row1']/a").get_attribute("title")
 
-            title = driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a)['+str(i)+']').get_attribute("title")  
-            logging.info("title - " + str(title))            
-            job_days_old = driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row6"]/span[@class = "job-post-day " ])['+str(i)+']').text        
-            job_days_old = job_days_old.lower()
-            # job_old_str_list = [ "just now", "few hours ago", "days ago", "day ago"]
-            if "30+" in job_days_old:           
-                logging.warning(f"Job '{title}' is posted 30 days back so ignoring") 
+            job_title = driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a)['+str(i)+']').get_attribute("title")  
+            validated_job = validate_job_title( job_title )
+            if validated_job:
             
-            if "just now" in job_days_old or "few hours ago" in job_days_old or "days ago" in job_days_old or "day ago"  in job_days_old:
-                logging.info(f"Job '{title}' is posted - {job_days_old}") 
-                driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a)['+str(i)+']').click()
-                logging.info(f"Clicked on job - '{title}'")
-                window_handles = driver.window_handles
-                logging.info(window_handles)
-                driver.switch_to.window( window_handles[1] )
-                try:
-                    apply_button = driver.find_element(By.ID, "apply-button")
-                    apply_button.click()
-                    logging.info(f"Clicked on apply button")
+                logging.info("title - " + str(job_title))            
+                job_days_old = driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row6"]/span[@class = "job-post-day " ])['+str(i)+']').text        
+                job_days_old = job_days_old.lower()
+                # job_old_str_list = [ "just now", "few hours ago", "days ago", "day ago"]
+                if "30+" in job_days_old:           
+                    logging.warning(f"Job '{job_title}' is posted 30 days back so ignoring") 
+                
+                if "just now" in job_days_old or "few hours ago" in job_days_old or "days ago" in job_days_old or "day ago"  in job_days_old:
+                    logging.info(f"Job '{job_title}' is posted - {job_days_old}") 
+                    driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a)['+str(i)+']').click()
+                    logging.info(f"Clicked on job - '{job_title}'")
+                    window_handles = driver.window_handles
+                    logging.info(window_handles)
+                    driver.switch_to.window( window_handles[1] )
                     try:
-                        apply_message = driver.find_element(By.XPATH, '//*[@class = "apply-message"]').text
-                        if "You have successfully applied" in apply_message:
-                            logging.info(f"Successfully applied to job - {title}")
+                        apply_button = driver.find_element(By.ID, "apply-button")
+                        apply_button.click()
+                        logging.info(f"Clicked on apply button")
+                        try:
+                            apply_message = driver.find_element(By.XPATH, '//*[@class = "apply-message"]').text
+                            if "You have successfully applied" in apply_message:
+                                logging.info(f"Successfully applied to job - {job_title}")
+                        except Exception as e:
+                            logging.info(f"Apply success message is not there, checking chatbot popup")
+
+
+                        # //*[@class = "apply-message"]
+                        logging.info(f"Checking if chatbot popup present")
+                        try:
+                            chatbot_popup_el = driver.find_element(By.XPATH, "//div[@class = 'chatbot_Drawer chatbot_right' ]")
+                            logging.info(f"Chatbot window present")
+
+                            # find chats list
+                            chat_list_elements = driver.find_elements(By.XPATH, "//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/li")
+                            logging.debug(f"List items chat bot - '{chat_list_elements}'")
+                            last_q_text = chat_list_elements[-1].find_element(By.XPATH, "./div[contains( @class, 'botMsg')]//*/span").text
+                            logging.info(f"Chatbot latest question text - '{last_q_text}'")
+
+
+    # //div[@class = 'chatbot_Drawer chatbot_right']//*/ul/li
+    # //div[@class = "chatbot_InputContainer"]
+
+                        except Exception as e:
+                            logging.info(f"Chatbot popup not present")
+
+    # 
+
+                        logging.info(f"Applied to job - '{job_title}'")
+                        time.sleep(10)
+                        driver.close()
+                        logging.info(f"Closed window - '{window_handles[1]}'") 
+                        driver.switch_to.window(window_handles[0])               
+                        logging.info(f"Switched back to main window") 
+
                     except Exception as e:
-                        logging.info(f"Apply success message is not there, checking chatbot popup")
+                        logging.warning(f"Apply button not found for this job")
+                        driver.close()
+                        logging.info(f"Closed window - '{window_handles[1]}'") 
+                        driver.switch_to.window(window_handles[0])               
+                        logging.info(f"Switched back to main window")
 
-
-                    # //*[@class = "apply-message"]
-                    logging.info(f"Checking if chatbot popup present")
-                    try:
-                        chatbot_popup_el = driver.find_element(By.ID, "_17go0qzspDrawer")
-                    except Exception as e:
-                        logging.info(f"Chatbot popup not present")
-
-# 
-
-                    logging.info(f"Applied to job - '{title}'")
-                    time.sleep(10)
-                    driver.close()
-                    logging.info(f"Closed window - '{window_handles[1]}'") 
-                    driver.switch_to.window(window_handles[0])               
-                    logging.info(f"Switched back to main window") 
-
-                except Exception as e:
-                    logging.warning(f"Apply button not found for this job")
-                    driver.close()
-                    logging.info(f"Closed window - '{window_handles[1]}'") 
-                    driver.switch_to.window(window_handles[0])               
-                    logging.info(f"Switched back to main window")
-
-
-
+            else:
+                logging.warning(f"Not applying for this job - '{job_title}'")
 
 
 
