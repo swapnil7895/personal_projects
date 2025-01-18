@@ -33,7 +33,10 @@ if __name__ == "__main__":
     print("start")
     webdriver_path = r'./driver/chromedriver.exe'
     chrome_options = Options()
-    chrome_options.add_argument("user-data-dir=C:/Users/swapn/AppData/Local/Google/Chrome/User Data")
+
+    user_data_dir = config["job_apply_config"]["user_data_dir"]
+    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
+    # chrome_options.add_argument("user-data-dir=C:/Users/swapn/AppData/Local/Google/Chrome/User Data")
     chrome_options.add_argument(f"profile-directory=Default")
     chrome_options.add_argument(f"--remote-debugging-port=9222")
     chrome_options.add_argument(f"--no-sandbox")
