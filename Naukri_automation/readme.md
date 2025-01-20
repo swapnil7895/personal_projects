@@ -6,6 +6,7 @@ This project automates job applications on Naukri using Python and Selenium. Fol
 - Automated Job Search: Searches for jobs based on keywords (Location based search feature yet to be added).
 - Apply for Jobs: Automatically applies to jobs based on user-defined criteria. - (Only easy apply jobs get applied now)
 - Track Applied Jobs: Keeps a record of applied jobs (could be saved in a PDF file.)
+- Email feature - sends email of status of applied jobs to your email id
 
 
 ## Requirements
@@ -24,6 +25,7 @@ This project automates job applications on Naukri using Python and Selenium. Fol
 - Run the following command to install the necessary libraries:
    ```bash
     pip install selenium fpdf
+    pip install python-dotenv
 
 3. **Check Chrome Version**
 
@@ -48,6 +50,14 @@ This project automates job applications on Naukri using Python and Selenium. Fol
 
 - Open Chrome and log in to your Naukri account.
 - Ensure the session is active before running the automation.
+
+7. **Set up email configuration to get emails**
+
+- configure values in config for email section if not configured already
+- you will need .env file to keep gmail app password to get email from you account
+- App password is different from your regular gmail password
+- to get app password for your gmail account follow steps to get password 
+- This link will help to create app password - [STEPS TO CREATE APP PASSWORD](https://support.google.com/accounts/answer/185833?visit_id=638729952660990767-3397793079&p=InvalidSecondFactor&rd=1)
 
 #    Running the Automation
 

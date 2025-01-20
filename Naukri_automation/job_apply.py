@@ -12,6 +12,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 import logging
 import configparser
+
+from dotenv import load_dotenv
+
+
 from job_apply_lib import *
 
 
@@ -31,12 +35,11 @@ if __name__ == "__main__":
     logging.info(f"Keywords to search for job - {keywords_to_search}")
 
     print("start")
-    webdriver_path = r'./driver/chromedriver.exe'
+    webdriver_path = config["job_apply_config"]["webdriver_path"]
     chrome_options = Options()
 
     user_data_dir = config["job_apply_config"]["user_data_dir"]
     chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-    # chrome_options.add_argument("user-data-dir=C:/Users/swapn/AppData/Local/Google/Chrome/User Data")
     chrome_options.add_argument(f"profile-directory=Default")
     chrome_options.add_argument(f"--remote-debugging-port=9222")
     chrome_options.add_argument(f"--no-sandbox")
@@ -44,7 +47,6 @@ if __name__ == "__main__":
     chrome_options.add_argument(f"--disable-extensions")
 
     # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
-    # user_data_dir = r"C:\Users\swapn\AppData\Local\Google\Chrome\User Data"
     # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
     # service = Service(ChromeDriverManager().install())
 
@@ -56,7 +58,13 @@ if __name__ == "__main__":
     logging.info("Driver set")
     driver.maximize_window()
 
+
+    load_dotenv()
+
     try:
+
+        sender_email, receiver_email, sender_pwd, smtp_server_name, smtp_server_port = get_mail_config( config )
+
         naukri_job_site_url = config["job_apply_config"]["job_site_url"]
         driver.get( naukri_job_site_url )
         logging.info("URL Launched")
@@ -83,16 +91,20 @@ if __name__ == "__main__":
         
         pdf_file_name = initialize_pdf( config )
 
+
+        pages_to_check = 5 # default pages to check for jobs
+        pages_to_check = config["job_apply_config"]["pages_to_check"]
+        logger.info(f"Job search pages to check - {pages_to_check}")
+
         while True:
 
             all_jobs_on_page_el = driver.find_elements(By.XPATH, xpaths["all_jobs_on_page"])
             logging.info(f"All jobs count from this page - {str(len( all_jobs_on_page_el))}")       
             logging.info(f"Looping over all jobs of this page")
 
-
             current_page = driver.find_element(By.XPATH, xpaths["current_page_number"]).text
             logging.info(f"Current page number - '{current_page}'")
-            if current_page == "3":
+            if current_page == pages_to_check:
                 break
 
             for i in range( 1, len( all_jobs_on_page_el) + 1, 1 ):
@@ -255,15 +267,33 @@ if __name__ == "__main__":
         logging.info(f"Job skip count - {job_skip_count}")
         add_line_to_pdf( txt=f"Success job apply count - {job_apply_success_count}" )                    
         add_line_to_pdf( txt=f"Total jobs cheked - {job_apply_count}" )                    
-        add_line_to_pdf( txt=f"Job skip count - {job_skip_count}" )                    
+        add_line_to_pdf( txt=f"Job skip count - {job_skip_count}" )                            
 
         # pdf.output(pdf_file_name)  
         write_pdf_file(pdf_file_name)  
+     
+        # send status email
+        subject =  f"Job apply status report - {datetime.now().strftime('%d-%m-%Y')}"
+        body = f"""
+                    <html><br>Job search platform - Naukri
+                    <br>Success job apply count - {job_apply_success_count}
+                    <br>Total jobs cheked - {job_apply_count}
+                    <br>Job skip count - {job_skip_count}<br></html>
+                """
+        send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body, pdf_file_name)
                     # //a[contains( @class, "styles_btn-secondary")]//span[contains( text(), "Next")]
                     # '//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a'
                     # '//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/span[@class = "job-post-day " ]'            
                     # //div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row6"]/span[@class = "job-post-day " ]
                     # placeholder="Enter keyword / designation / companies"
+
+    except Exception as e:
+        if logger is not None:
+            logger.info(f"Exception - {e}")
+        if sender_email and receiver_email and sender_pwd and smtp_server_name and smtp_server_port:
+            body = f"Failed to execute job apply automation with error - {e}"
+            subject =  f"Job apply status report - {datetime.now().strftime('%d-%m-%Y')} - FAILED"
+            send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)
 
     finally:
         driver.quit()
