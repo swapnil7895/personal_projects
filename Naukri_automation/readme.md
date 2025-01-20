@@ -58,6 +58,11 @@ This project automates job applications on Naukri using Python and Selenium. Fol
 - App password is different from your regular gmail password
 - to get app password for your gmail account follow steps to get password 
 - This link will help to create app password - [STEPS TO CREATE APP PASSWORD](https://support.google.com/accounts/answer/185833?visit_id=638729952660990767-3397793079&p=InvalidSecondFactor&rd=1)
+- create file named .env in your directory where python files are present
+- Create key named  EMAIL_PASSWORD and assign app password which was generated from previous step
+- eg
+- ` EMAIL_PASSWORD=<replace-with-your-password>`
+
 
 #    Running the Automation
 
