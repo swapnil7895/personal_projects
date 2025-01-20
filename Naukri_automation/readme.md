@@ -68,8 +68,7 @@ This project automates job applications on Naukri using Python and Selenium. Fol
 
 1. **Kill Existing Chrome Processes**
 
-- Open Task Manager (Ctrl + Shift + Esc).
-- End any running Chrome processes.
+- If chrome is already running, it will be closed by automation process to launch new automation Chrome instance.
 
 2. **Run the Script**
 - Run the main automation script:

@@ -12,60 +12,35 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 import logging
 import configparser
-
 from dotenv import load_dotenv
 
 
 from job_apply_lib import *
 
 
-if __name__ == "__main__":
-    
-    job_apply_count = 0
-    job_skip_count = 0
-    job_apply_success_count = 0
-
-    logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    config = configparser.ConfigParser()
-    config.read('./job_apply.conf')
-    xpaths = config["xpaths"]
-
-    keywords_to_search = config["job_apply_config"]["keywords_job_search"]
-    logging.info(f"Keywords to search for job - {keywords_to_search}")
-
-    print("start")
-    webdriver_path = config["job_apply_config"]["webdriver_path"]
-    chrome_options = Options()
-
-    user_data_dir = config["job_apply_config"]["user_data_dir"]
-    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-    chrome_options.add_argument(f"profile-directory=Default")
-    chrome_options.add_argument(f"--remote-debugging-port=9222")
-    chrome_options.add_argument(f"--no-sandbox")
-    chrome_options.add_argument(f"--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--disable-extensions")
-
-    # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
-    # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
-    # service = Service(ChromeDriverManager().install())
-
-    service = Service(webdriver_path)
-    logging.info("Service set")
-
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.implicitly_wait(10)
-    logging.info("Driver set")
-    driver.maximize_window()
-
-
-    load_dotenv()
-
+def run_job_apply_automation( platform ):
     try:
+        logger.info(f"Start - run_job_apply_automation( platform )")
+        if platform.lower().strip() == "naukri":
+           run_job_apply_for_naukri()
+    except Exception as e:
+        logger.error(f"Failed in - 'run_job_apply_automation( platform )' - {e}")
 
-        sender_email, receiver_email, sender_pwd, smtp_server_name, smtp_server_port = get_mail_config( config )
 
-        naukri_job_site_url = config["job_apply_config"]["job_site_url"]
+def run_job_apply_for_naukri():
+    try:
+        job_apply_count = 0
+        job_skip_count = 0
+        job_apply_success_count = 0        
+        logger.info(f"Start - 'run_job_apply_for_naukri()'")
+
+        pdf_file_name = initialize_pdf( config )
+
+        keywords_to_search = config["naukri_config"]["keywords_job_search"]
+        logging.info(f"Keywords to search for job - {keywords_to_search}")        
+        xpaths = config["naukri_xpaths"]
+
+        naukri_job_site_url = config["naukri_config"]["job_site_url"]
         driver.get( naukri_job_site_url )
         logging.info("URL Launched")
         # driver.execute_script("window.stop();")\\\
@@ -77,10 +52,18 @@ if __name__ == "__main__":
         logging.info("Clicked on 'Search jobs here' button")
         driver.find_element(By.XPATH, xpaths["jobsearch_textarea"]).send_keys(f"{keywords_to_search}")
         logging.info(f"Entered text '{keywords_to_search}'")
+      
+        if config["naukri_config"]["search_jobs_by_loc"].lower() == "true":
+            joblocation_to_search = config["naukri_config"]["job_search_location"]
+            driver.find_element(By.XPATH, xpaths["joblocation_input"]).send_keys(f"{joblocation_to_search}")
+            logger.info(f"Searching jobs with location - '{joblocation_to_search}'")
+        else:
+            logger.info(f"Searching jobs without location")            
+
         driver.find_element(By.XPATH, xpaths["jobsearch_textarea"] ).send_keys(Keys.ENTER)
         logging.info(f"Pressed ENTER")
 
-        if config["job_apply_config"]["sort_jobs_by_date"].lower() == "true":
+        if config["naukri_config"]["sort_jobs_by_date"].lower() == "true":
             logging.info(f"Sorting jobs by date")
             driver.find_element(By.XPATH, xpaths["sort_filter_btn"]).click()
             logging.info(f"Clicked on sort FILTER")
@@ -89,11 +72,8 @@ if __name__ == "__main__":
         else:
             logger.info(f"Keeping default sort job filter")    
         
-        pdf_file_name = initialize_pdf( config )
-
-
         pages_to_check = 5 # default pages to check for jobs
-        pages_to_check = config["job_apply_config"]["pages_to_check"]
+        pages_to_check = config["naukri_config"]["pages_to_check"]
         logger.info(f"Job search pages to check - {pages_to_check}")
 
         while True:
@@ -127,7 +107,9 @@ if __name__ == "__main__":
                     # job_company = driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row2"]//a)['+str(i)+']').get_attribute("title")              
                     job_company = driver.find_element(By.XPATH, each_job_dtls_xpath_row2 ).get_attribute("title")
                     logging.info(f"Job title - '{job_title}' at company - '{job_company}'")
-                    validated_job = validate_job_title( job_title, config )
+
+                    keywords_list_for_job_title = config["naukri_config"]["keywords_list_for_job_title_filter"].split(",")                    
+                    validated_job = validate_job_title( job_title, keywords_list_for_job_title )
                     validated_company = validate_company_title( job_company )
 
                     set_pdf_font("Arial", size=14, style="B")
@@ -228,7 +210,6 @@ if __name__ == "__main__":
                                 # pdf.cell(200, 10, txt=f"Apply button not found - FAILED TO APPLY", ln=True, align='L')
                                 add_line_to_pdf( txt=f"Apply button not found - FAILED TO APPLY" )
 
-
                                 driver.close()
                                 logging.info(f"Closed window - '{window_handles[1]}'") 
                                 driver.switch_to.window(window_handles[0])               
@@ -245,7 +226,6 @@ if __name__ == "__main__":
                         # pdf.set_font(size=12, family="Arial")
                         set_pdf_font("Arial", size=12 )
 
-
                     # pdf.ln(10)
                     add_line_to_pdf(empty_line=True)
 
@@ -261,7 +241,6 @@ if __name__ == "__main__":
                     driver.save_screenshot("error_screenshot.png")
                     logging.error(f"Exception - {e}")
 
-
         logging.info(f"Success job apply count - {job_apply_success_count}")
         logging.info(f"Total jobs cheked - {job_apply_count}")
         logging.info(f"Job skip count - {job_skip_count}")
@@ -273,12 +252,14 @@ if __name__ == "__main__":
         write_pdf_file(pdf_file_name)  
      
         # send status email
-        subject =  f"Job apply status report - {datetime.now().strftime('%d-%m-%Y')}"
+        subject =  f"{str(job_search_platform.capitalize() )}: Job apply status report - {str(datetime.now().strftime('%d-%m-%Y'))}"
         body = f"""
                     <html><br>Job search platform - Naukri
+                    <br>Jobs applied with keywords searched - {keywords_to_search}<br>
                     <br>Success job apply count - {job_apply_success_count}
                     <br>Total jobs cheked - {job_apply_count}
                     <br>Job skip count - {job_skip_count}<br></html>
+                    
                 """
         send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body, pdf_file_name)
                     # //a[contains( @class, "styles_btn-secondary")]//span[contains( text(), "Next")]
@@ -286,6 +267,69 @@ if __name__ == "__main__":
                     # '//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/span[@class = "job-post-day " ]'            
                     # //div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row6"]/span[@class = "job-post-day " ]
                     # placeholder="Enter keyword / designation / companies"
+
+
+    except Exception as e:
+        logger.error(f"Failed in - 'run_job_apply_for_naukri()' -{e}")
+        body = f"Failed to execute job apply automation with error - {e}"
+        subject =  f"{str(job_search_platform.capitalize())} Job apply status report - {datetime.now().strftime('%d-%m-%Y')} - FAILED"
+        send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)        
+
+
+if __name__ == "__main__":
+    # logger =None
+    sender_email=None 
+    receiver_email=None
+    sender_pwd=None
+    smtp_server_name=None 
+    smtp_server_port=None
+    
+    logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    config = configparser.ConfigParser()
+    config.read('./job_apply.conf')
+
+    os.system("taskkill /im chrome.exe /f")
+
+    webdriver_path = config["job_apply_config"]["webdriver_path"]
+    chrome_options = Options()
+
+    user_data_dir = config["job_apply_config"]["user_data_dir"]
+    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
+    chrome_options.add_argument(f"profile-directory=Default")
+    chrome_options.add_argument(f"--remote-debugging-port=9222")
+    chrome_options.add_argument(f"--no-sandbox")
+    chrome_options.add_argument(f"--disable-dev-shm-usage")
+    chrome_options.add_argument(f"--disable-extensions")
+
+    # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
+    # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
+    # service = Service(ChromeDriverManager().install())
+
+    service = Service(webdriver_path)
+    logging.info("Service set")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.implicitly_wait(10)
+    logging.info("Driver set")
+    driver.maximize_window()
+
+    load_dotenv()
+
+    job_search_platforms = config["job_apply_config"]["job_search_platforms"].split(",")
+    logger.info(f"Job search platforms - {job_search_platforms}")
+
+    try:
+
+
+        sender_email, receiver_email, sender_pwd, smtp_server_name, smtp_server_port = get_mail_config( config ) 
+
+        if job_search_platforms == [] or job_search_platforms == None:
+            logger.warning(f"No platform is present to check jobs, check config")
+
+        for job_search_platform in job_search_platforms:
+            if job_search_platform.lower() == "naukri":
+                logger.info(f"Job search started for platform - '{job_search_platform}'")
+                run_job_apply_automation( platform = job_search_platform)
 
     except Exception as e:
         if logger is not None:

@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 global pdf
 
-def validate_job_title( job_title, config ):
+def validate_job_title( job_title, keywords_list_for_job_title ):
     logger.info(f"In validate job function")
-    keywords_list_for_job_title = config["job_apply_config"]["keywords_list_for_job_title_filter"].split(",")
+
     for job_title_keyword in keywords_list_for_job_title:
         if job_title_keyword.lower() in job_title.lower():
             logger.info(f"Job validated")
@@ -28,7 +28,6 @@ def validate_company_title( job_company ):
         return False
     else:
         return True
-
 
 def initialize_pdf( config ):
     global pdf
@@ -53,11 +52,9 @@ def add_line_to_pdf(txt = None , empty_line = False):
     else:
         pdf.cell(200, 10, txt=f"{txt}", ln=True, align='L')
 
-
 def write_pdf_file( pdf_file_name ):
     global pdf
     pdf.output(pdf_file_name)  
-
 
 def get_mail_config(config):
     logger.info(f"Start - get_mail_config(config)")
@@ -73,8 +70,6 @@ def get_mail_config(config):
         return sender_email, receiver_email, sender_pwd, smtp_server_name, smtp_server_port
     except Exception as e:
         logger.error(f"Failed to get email details - {e}")
-
-
 
 def send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body, full_file_path = None):
 
