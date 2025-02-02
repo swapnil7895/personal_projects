@@ -53,8 +53,10 @@ def call_chatgpt(question_):
 
         question_ = my_info + question_
         print(f"Question - {question_}")
- 
-        genai.configure(api_key=r"AIzaSyCmzWETgqauRDxDzo8KXZd3_lxD06D6j1o")
+
+        api_key = os.getenv("GEMINI_API_KEY")  
+        # genai.configure(api_key=r"AIzaSyCmzWETgqauRDxDzo8KXZd3_lxD06D6j1o")
+        genai.configure(api_key=api_key)        
         model = genai.GenerativeModel("gemini-1.5-flash")
         resp = model.generate_content(question_)
         print(f"Response - {resp.text}")
