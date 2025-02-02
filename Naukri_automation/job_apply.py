@@ -13,16 +13,64 @@ from selenium.webdriver.common.keys import Keys
 import logging
 import configparser
 from dotenv import load_dotenv
-
+import openai
+import google.generativeai as genai
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 from job_apply_lib import *
 
+
+def call_chatgpt(question_):
+    try:
+        logger.info(f"In call_chatgpt()")
+        logger.info(f"Question- {question_}")
+
+        # # openai.api_key = 'your-api-key'
+        # openai.api_key = os.getenv("OPENAI_API_KEY")    
+
+        # def get_answer(question):
+        #     response = openai.Completion.create(
+        #         model="gpt-3.5-turbo",  # Or any other available GPT model
+        #         prompt=question,
+        #         max_tokens=150
+        #     )
+        #     answer = response['choices'][0]['text'].strip()
+        #     return answer
+        # # question = "What is the capital of France?"
+        # answer = get_answer(question_)
+        # print(answer)
+        
+        my_info = """my name is swapnil dhamal. I am having 3.5 years of experience in Python, Ansible, java, selenium and automation. 
+        I am writing this prompt to let you give anwser of below question according to my information in very short way. 
+        For example if question is 'How many year of exp you have in python' answer should be '3.5'.
+        my 10th percentage is 76
+        my 12th percentage is 60
+        my graduation percentage/ cgpa is 9.16 
+
+        Below is the question (This question is not for you its for me, so even if its mentioned 'you' consider itv as me and answer ). \n\n"""
+
+        question_ = my_info + question_
+        print(f"Question - {question_}")
+ 
+        genai.configure(api_key=r"AIzaSyCmzWETgqauRDxDzo8KXZd3_lxD06D6j1o")
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(question_)
+        print(f"Response - {resp.text}")
+        logger.info(f"Response - {resp.text}")        
+
+        return resp.text.lower()
+    except  Exception as e:
+        logger.error(f"Failed in - call_chatgpt(question) - {e}")
 
 def run_job_apply_automation( platform ):
     try:
         logger.info(f"Start - run_job_apply_automation( platform )")
         if platform.lower().strip() == "naukri":
            run_job_apply_for_naukri()
+        if platform.lower().strip() == "linkedin":
+           run_job_apply_for_linkedin()           
     except Exception as e:
         logger.error(f"Failed in - 'run_job_apply_automation( platform )' - {e}")
 
@@ -76,7 +124,10 @@ def run_job_apply_for_naukri():
         pages_to_check = config["naukri_config"]["pages_to_check"]
         logger.info(f"Job search pages to check - {pages_to_check}")
 
+        next_page = 1
         while True:
+
+            driver.refresh()
 
             all_jobs_on_page_el = driver.find_elements(By.XPATH, xpaths["all_jobs_on_page"])
             logging.info(f"All jobs count from this page - {str(len( all_jobs_on_page_el))}")       
@@ -84,6 +135,11 @@ def run_job_apply_for_naukri():
 
             current_page = driver.find_element(By.XPATH, xpaths["current_page_number"]).text
             logging.info(f"Current page number - '{current_page}'")
+
+            if current_page == next_page:
+                logger.warning(f"Even after clicking next button still on same page, probably next page is not fully loaded")
+                time.sleep(3)
+
             if current_page == pages_to_check:
                 break
 
@@ -171,26 +227,53 @@ def run_job_apply_for_naukri():
                                 try:
                                     chatbot_popup_el = driver.find_element(By.XPATH, xpaths["chatbot_popup_window"])
                                     logging.info(f"Chatbot window present")
-
+                                
 
                                     # pdf.cell(200, 10, txt=f"Skipping applying this job (chatbot popup present)", ln=True, align='L')
                                     add_line_to_pdf( txt=f"Skipping applying this job (chatbot popup present)" )
 
                                     ## for now, chatbot pop window feature is not ready so skipping it
-                                    current_w_h = driver.current_window_handle
-                                    logging.debug(f"Window handle will be closed - {driver.current_window_handle}")
-                                    driver.close()
-                                    driver.switch_to.window( window_handles[0] )
-                                    logging.info(f"Switched back to main window -'{driver.current_window_handle}'")
+                                    # current_w_h = driver.current_window_handle
+                                    # logging.debug(f"Window handle will be closed - {driver.current_window_handle}")
+                                    # driver.close()
+                                    # driver.switch_to.window( window_handles[0] )
+                                    # logging.info(f"Switched back to main window -'{driver.current_window_handle}'")
 
                                     job_skip_count = job_skip_count + 1
-                                    continue
 
                                     # find chats list
                                     chat_list_elements = driver.find_elements(By.XPATH, "//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/li")
                                     logging.debug(f"List items chat bot - '{chat_list_elements}'")
                                     last_q_text = chat_list_elements[-1].find_element(By.XPATH, "./div[contains( @class, 'botMsg')]//*/span").text
                                     logging.info(f"Chatbot latest question text - '{last_q_text}'")
+
+                                    answer = call_chatgpt(last_q_text)
+
+                                    ##
+                                    input_box_present = driver.find_elements( By.XPATH, r"//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::div//*[ contains( @class, 'chatbot_InputContainer')]" )
+                                    if input_box_present:
+                                        logger.info(f"Input box present { len(input_box_present) }")
+
+                                    singleselect_radio_button_present = driver.find_elements(By.XPATH, r"//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::div//*[ contains( @class, 'singleselect-radiobutton-container')]")                                        
+                                    if singleselect_radio_button_present:
+                                        logger.info(f"Radio button present { len(singleselect_radio_button_present) }")
+                                    ##check for answer input field or check box
+                                    checkbox_present = driver.find_element(By.XPATH, f"//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::*[contains(@class, 'multiselectcheckboxes') ]")
+                                    # checkbox_present
+
+                                    driver.find_element(By.XPATH, f"//div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::*[contains(@class, 'multiselectcheckboxes') ]//label[contains( @for, '{answer.capitalize()}') ]" ).click()
+
+                                    # //div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::*[1]//input[ contains( @type, "checkbox") ]
+
+                                    ## to check if checkbox is there
+                                    # //div[@class = 'chatbot_Drawer chatbot_right']//*/ul/following-sibling::*[contains(@class, "multiselectcheckboxes") ]
+
+                                    # get q
+                                    # call open ai api
+                                    #get anwser
+
+                                    continue
+
                                     # //div[@class = 'chatbot_Drawer chatbot_right']//*/ul/li
                                     # //div[@class = "chatbot_InputContainer"]
 
@@ -236,6 +319,11 @@ def run_job_apply_for_naukri():
                         driver.execute_script("arguments[0].click();", driver.find_element(By.XPATH, xpaths["next_job_page_btn"]))                        
                         # driver.find_element(By.XPATH, xpaths["next_job_page_btn"]).click()
                         logging.info(f"Clicked on next button -->")
+                        print("Clicked on next button")
+                        time.sleep(5)
+                        next_page = 1 + next_page
+                        # time.sleep(100)
+
 
                 except Exception as e:            
                     driver.save_screenshot("error_screenshot.png")
@@ -276,6 +364,163 @@ def run_job_apply_for_naukri():
         send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)        
 
 
+def run_job_apply_for_linkedin():
+    try:
+        logger.info(f"***********Start - run_job_apply_for_linkedin()")
+        linkedin_job_site_url = config["linkedin_config"]["job_site_url"]
+        driver.get( linkedin_job_site_url )
+        logging.info("URL Launched")
+        # input("press any key to continue")
+        
+        # driver.find_element(By.XPATH, r'//*[contains( @id, "jobs-search-box-keyword-id" )]').send_keys("Python Developer")
+        driver.find_element(By.XPATH, r'//div[contains( @class, "search-global-typeahead" )]').click()  
+        logger.info(f"Clcied")      
+        time.sleep(5)
+        driver.find_element(By.XPATH, r'//*[contains( @class, "search-global-typeahead" )]//input').send_keys("Python Developer")
+        logger.info(f"Entered text")      
+        driver.find_element(By.XPATH, r'//*[contains( @class, "search-global-typeahead" )]//input').send_keys(Keys.ENTER)
+        logger.info(f"Entered text")      
+        driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Jobs' ]").click()
+        logger.info(f"clcikedd on jobs")      
+        driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
+        logger.info(f"clcikedd on easy apply")      
+
+        driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
+        time.sleep(3)
+        listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+
+        wait = WebDriverWait(driver, 20)
+
+        logger.info(f"Total jobs - {len(listed_jobs_ul)}")
+
+        # for index, job_li in enumerate( listed_jobs_ul ):
+        index = 1
+        while True:
+            logger.info(f"Processing job number - {index} from current page")
+            try:
+                listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                logger.info(f"Total jobs - {len(listed_jobs_ul)}")                    
+                if len(listed_jobs_ul) == index+1:
+                    logger.info(f"Last job on this page")
+                    continue
+
+                logger.info(f"Job number - {index}")
+                            
+                try:
+                    job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                except Exception as e:
+                    job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+
+
+                driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                logger.info(f"Scrolled into view")
+                t = job_li_el.text
+                job_li_el.click()
+                logger.info(f"Clicked on job record")
+                time.sleep(2)
+
+                # click on easy apply
+                # easy_apply_button = wait.until( EC.presence_of_element_located( (By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]") )  ).click()
+                easy_apply_button = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]") )  )
+                if not easy_apply_button:
+                    logger.Warning(f"Already applied for this job")
+                    continue
+                easy_apply_button[0].click()
+
+                logger.info(f"Clicked on easy apply button")                
+                time.sleep(1)
+                wait.until( EC.presence_of_element_located( (By.XPATH, f"//button[ @aria-label ='Continue to next step' ]") )  ).click()
+                time.sleep(1)
+                wait.until( EC.presence_of_element_located( (By.XPATH, f"//button[ @aria-label ='Continue to next step' ]") )  ).click()
+
+                time.sleep(1)
+                questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
+                logger.info(f"Quesstion's count - {len(questions_el)}")
+
+                for question_el in questions_el:                    
+                    input_el =question_el.find_elements(By.XPATH, f".//input")
+                    if not input_el:
+                        logger.info(f"No input element present")
+                        select_el =question_el.find_elements(By.XPATH, f".//select")
+                        if not select_el:
+                            logger.info(f"No select element present")
+                        else:
+                            logger.info(f"Select element present")
+                    else:
+                        logger.info(f"Input element present")
+
+                        #
+                        #check if checkbox
+                        input_el_class = input_el[0].get_attribute("class")
+                        logger.info(f"Class - {input_el_class}")
+
+                        if "checkbox" in input_el_class:
+                            logger.info(f"Radio button question")
+                        else:
+                            label = input_el[0].find_element(By.XPATH, f"./preceding-sibling::label" )
+                            logger.info(f"Label text - {label.text}")
+                            if "how many years" in label.text.lower():
+                                input_el[0].clear()
+                                input_el[0].send_keys('3')
+                            elif "current ctc" in label.text.lower():
+                                input_el[0].clear()
+                                input_el[0].send_keys('500000')
+                            elif "expected ctc" in label.text.lower():
+                                input_el[0].clear()
+                                input_el[0].send_keys('1000000')
+
+
+                # click on review btn
+                
+                driver.find_element(By.XPATH, f"//button[ contains( @aria-label, 'Review your application' ) ]" ).click()                
+                logger.info(f"Clicked on review button")
+                driver.find_element(By.XPATH, f"//button[contains(@aria-label, 'Submit application' ) ]" ).click()
+                logger.info(f"Clicked on submit button")
+                driver.find_element(By.XPATH, f"//button//span[ text() = 'Done']" ).click()                
+                logger.info(f"Clicked on Done")
+                
+
+
+
+                # t = driver.find_element( By.XPATH, rf"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]" ).text
+                logger.info(f"t -  {t}")                
+                index = index + 1
+
+                next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
+                if next_job_el:
+                    logger.info(f"Next job is available loop will continue")
+                else:
+                    logger.info(f"Next job is not available loop will break")
+                    print(f"Next job is not available loop will break")
+
+                    time.sleep(100)
+                    break
+                
+
+            except StaleElementReferenceException:
+                index = index + 1
+                logger.warning(f"stale el")
+                job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                t = job_li_el.text
+                logger.info(t)
+                driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                job_li_el.click()
+                time.sleep(2)
+                logger.info(f"Scrolled into view -s")                
+            except Exception as e:
+                index = index + 1
+                logger.error(f"Error - {e}")
+        # time.sleep(100)
+
+# cliec
+
+
+    except Exception as e:
+        logger.error(f"Failed in - 'run_job_apply_for_linkedin()' -{e}")
+        body = f"Failed to execute job apply automation with error - {e}"
+        subject =  f"{str(job_search_platform.capitalize())} Job apply status report - {datetime.now().strftime('%d-%m-%Y')} - FAILED"
+        # send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)        
+# 
 if __name__ == "__main__":
     # logger =None
     sender_email=None 
@@ -284,7 +529,9 @@ if __name__ == "__main__":
     smtp_server_name=None 
     smtp_server_port=None
     
-    logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    date = datetime.now().strftime("%d-%m-%y")
+    logging.basicConfig(filename=f'app_{date}.log', filemode="w", level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     config = configparser.ConfigParser()
     config.read('./job_apply.conf')
@@ -327,9 +574,8 @@ if __name__ == "__main__":
             logger.warning(f"No platform is present to check jobs, check config")
 
         for job_search_platform in job_search_platforms:
-            if job_search_platform.lower() == "naukri":
-                logger.info(f"Job search started for platform - '{job_search_platform}'")
-                run_job_apply_automation( platform = job_search_platform)
+            logger.info(f"Job search started for platform - '{job_search_platform}'")
+            run_job_apply_automation( platform = job_search_platform)
 
     except Exception as e:
         if logger is not None:
