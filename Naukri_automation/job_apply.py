@@ -15,6 +15,30 @@ import configparser
 from dotenv import load_dotenv
 
 
+
+
+
+import subprocess
+
+
+
+import sys
+
+def get_browser_from_args(default="edge"):
+    # Check if a browser argument is passed
+    if len(sys.argv) > 1:
+        browser = sys.argv[1].strip().lower()
+        print(f"Browser specified via command line: {browser}")
+    else:
+        browser = default
+        print(f"No browser specified. Using default: {browser}")
+    return browser
+
+# Example usage
+
+
+
+
 from job_apply_lib import *
 
 
@@ -23,6 +47,8 @@ def run_job_apply_automation( platform ):
         logger.info(f"Start - run_job_apply_automation( platform )")
         if platform.lower().strip() == "naukri":
            run_job_apply_for_naukri()
+        elif platform.lower().strip() == "linkedin":
+           run_job_apply_for_linkedin()
     except Exception as e:
         logger.error(f"Failed in - 'run_job_apply_automation( platform )' - {e}")
 
@@ -276,6 +302,21 @@ def run_job_apply_for_naukri():
         send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)        
 
 
+def run_job_apply_for_linkedin():
+    try:
+        logger.info(f"Start - run_job_apply_for_linkedin()")
+        driver.get(f"https://linkedin.com")
+        # time.sleep(100000)
+        li_xpaths = config["linkedin_xpaths"]
+        
+        check_if_already_loggedin()
+# //*[@id="ember16"]
+        driver.find_element(By.XPATH, li_xpaths["sign_in"] ).click()
+
+
+    except Exception as e:
+        logger.error(f"Failed in - run_job_apply_for_linkedin()")
+
 if __name__ == "__main__":
     # logger =None
     sender_email=None 
@@ -289,29 +330,48 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('./job_apply.conf')
 
-    os.system("taskkill /im chrome.exe /f")
+    browser_choice = get_browser_from_args()
 
-    webdriver_path = config["job_apply_config"]["webdriver_path"]
-    chrome_options = Options()
+    if browser_choice.lower() == "edge":
+        kill_edge()
+        edge_driver_path = r'C:\Users\Admin\Documents\Swapnil\PP\personal_projects\Naukri_automation\driver\msedgedriver.exe'
 
-    user_data_dir = config["job_apply_config"]["user_data_dir"]
-    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-    chrome_options.add_argument(f"profile-directory=Default")
-    chrome_options.add_argument(f"--remote-debugging-port=9222")
-    chrome_options.add_argument(f"--no-sandbox")
-    chrome_options.add_argument(f"--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--disable-extensions")
+        # Set up Edge options (optional)
+        # edge_options = Options()
+        # edge_options.use_chromium = True
+        service = Service(executable_path=edge_driver_path)
+        # driver = webdriver.Edge(service=service, options=edge_options)
+        driver = webdriver.Edge(service=service)    
 
-    # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
-    # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
-    # service = Service(ChromeDriverManager().install())
 
-    service = Service(webdriver_path)
-    logging.info("Service set")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.implicitly_wait(10)
+
+    else:    
+        os.system("taskkill /im chrome.exe /f")
+
+        webdriver_path = config["job_apply_config"]["webdriver_path"]
+        chrome_options = Options()
+
+        user_data_dir = config["job_apply_config"]["user_data_dir"]
+        chrome_options.add_argument(f"user-data-dir={user_data_dir}")
+        chrome_options.add_argument(f"profile-directory=Default")
+        chrome_options.add_argument(f"--remote-debugging-port=9222")
+        chrome_options.add_argument(f"--no-sandbox")
+        chrome_options.add_argument(f"--disable-dev-shm-usage")
+        chrome_options.add_argument(f"--disable-extensions")
+
+        # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
+        # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
+        # service = Service(ChromeDriverManager().install())
+
+        service = Service(webdriver_path)
+        logging.info("Service set")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
+
     logging.info("Driver set")
+    # driver.get("https://www.linkedin.com")
     driver.maximize_window()
+    driver.implicitly_wait(10)
 
     load_dotenv()
 
@@ -320,16 +380,20 @@ if __name__ == "__main__":
 
     try:
 
-
         sender_email, receiver_email, sender_pwd, smtp_server_name, smtp_server_port = get_mail_config( config ) 
 
         if job_search_platforms == [] or job_search_platforms == None:
             logger.warning(f"No platform is present to check jobs, check config")
 
         for job_search_platform in job_search_platforms:
+            logger.info(f"Job search started for platform - '{job_search_platform}'")
             if job_search_platform.lower() == "naukri":
-                logger.info(f"Job search started for platform - '{job_search_platform}'")
                 run_job_apply_automation( platform = job_search_platform)
+            elif job_search_platform.lower() == "linkedin":
+                run_job_apply_automation( platform = job_search_platform)
+
+            else:
+                logger.warning(f"Unknown job search platform  - '{job_search_platform}'")
 
     except Exception as e:
         if logger is not None:

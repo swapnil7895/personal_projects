@@ -1,4 +1,5 @@
 import logging
+import subprocess
 from fpdf import FPDF
 from datetime import datetime
 import os
@@ -108,3 +109,12 @@ def send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp
             logger.info(f"Email sent successfully")
     except Exception as e:
         logger.error(f"Failed to send email - {e}")    
+
+def kill_edge():
+    try:
+        # This command forcibly kills all Microsoft Edge processes
+        subprocess.run("taskkill /F /IM msedge.exe", check=True, shell=True)
+        subprocess.run("taskkill /F /IM msedgedriver.exe", check=True, shell=True)
+        logger.info("All Edge processes killed.")
+    except subprocess.CalledProcessError as e:
+        logger.warning("No Edge processes found or already closed.")
