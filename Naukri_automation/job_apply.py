@@ -4,6 +4,8 @@
 ## Date - 1-18-2025
 
 import time
+from selenium.webdriver.support.ui import Select
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -13,16 +15,32 @@ from selenium.webdriver.common.keys import Keys
 import logging
 import configparser
 from dotenv import load_dotenv
-
-
-
-
-
+from job_apply_lib import *
 import subprocess
-
-
-
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import sys
+
+def take_full_screenshot(driver, filename="screenshot.png"):
+    """
+    Takes a full-page screenshot of the current browser window.
+
+    Args:
+        driver: Selenium WebDriver instance.
+        filename: Name of the screenshot file to save.
+    """
+    success = driver.save_screenshot(filename)
+    if success:
+        logger.info(f"Screenshot saved as {filename}")
+    else:
+        logger.error("Failed to take screenshot.")
+
+
+def kill_browser(browser_choice):
+    if browser_choice == "edge":
+        kill_edge()
+    elif browser_choice == "chrome":
+        kill_chrome()
 
 def get_browser_from_args(default="edge"):
     # Check if a browser argument is passed
@@ -34,13 +52,40 @@ def get_browser_from_args(default="edge"):
         print(f"No browser specified. Using default: {browser}")
     return browser
 
-# Example usage
+def check_if_already_loggedin( li_xpaths ):
+    try:
+        logger.info(f"Start - check_if_already_loggedin()")
+        profile_xpath = li_xpaths["profile_xpath"]
+        profile_elements = driver.find_elements(By.XPATH, profile_xpath)
+        if len(profile_elements) > 0:
+            logger.info(f"Profile element present so considering user aready logged in")
+            return True
+        else:
+            logger.info(f"Profile element not present so considering user not logged in")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed in - check_if_already_loggedin() - {e}")
 
+def linkedin_login( li_xpaths ):
+    try:
+        logger.info(f"Start - linkedin_login( li_xpaths )")
+        driver.find_element(By.XPATH, li_xpaths["sign_in"] ).click()
+        driver.find_element(By.XPATH, li_xpaths["email_or_phone_input"]).send_keys("swapnildhamal7895@gmail.com")
+        driver.find_element(By.XPATH, li_xpaths["pwd_input"]).send_keys(r"Swapnil@7895")
+        driver.find_element(By.XPATH, li_xpaths["sign_in_btn"]).click()  
+        # time.sleep(100000)
 
+        logged_in = check_if_already_loggedin(li_xpaths)
+        if logged_in:
+            logger.info(f"Login successful")
+            return True
+        else:
+            logger.error(f"Login failed")
+            return False
 
-
-from job_apply_lib import *
-
+    except Exception as e:
+        logger.error(f"Failed in - linkedin_login() - {e}")
 
 def run_job_apply_automation( platform ):
     try:
@@ -51,7 +96,7 @@ def run_job_apply_automation( platform ):
            run_job_apply_for_linkedin()
     except Exception as e:
         logger.error(f"Failed in - 'run_job_apply_automation( platform )' - {e}")
-
+        raise e
 
 def run_job_apply_for_naukri():
     try:
@@ -301,53 +346,287 @@ def run_job_apply_for_naukri():
         subject =  f"{str(job_search_platform.capitalize())} Job apply status report - {datetime.now().strftime('%d-%m-%Y')} - FAILED"
         send_email( sender_email, sender_pwd, receiver_email, smtp_server_name, smtp_server_port, subject, body)        
 
+def click_next_or_review():
+    try:
+        next_btn_els = driver.find_elements(By.XPATH, f"//button[contains( @aria-label, 'to next' )]")
+        if len(next_btn_els) > 0:
+            logger.info(f"Next button present on questions page")
+            next_btn_els[0].click()
+            logger.info(f"Clicked on next button")
+            return True  # continue loop
+        else:
+            raise Exception(f"No next button present")
+
+        # next_btn = driver.find_element(By.XPATH, "//button[span[text()='Next']]")
+        # next_btn.click()
+    except:
+        try:
+            ###
+            driver.find_element(By.XPATH, f"//button[ contains( @aria-label, 'Review your application' ) ]" ).click()                
+            logger.info(f"Clicked on review button")
+            driver.find_element(By.XPATH, f"//button[contains(@aria-label, 'Submit application' ) ]" ).click()
+            logger.info(f"Clicked on submit button")
+
+            done_btns = driver.find_elements(By.XPATH, f"//button//span[ text() = 'Done']" )   
+            if len(done_btns) > 0:
+                done_btns[0].click()
+                logger.info(f"Clicked on done btn") 
+            else:
+                logger.info(f"Done btn not present") 
+
+            # driver.find_element(By.XPATH, f"//button//span[ text() = 'Done']" ).click()                
+            
+            close_popup_btns = driver.find_elements( By.XPATH, f"//button[contains( @aria-label, 'Dismiss')  and contains(@class, 'dismiss') ]")
+            if len(close_popup_btns) > 0:
+                close_popup_btns[0].click()
+                logger.info(f"Clicked on close popup btn")
+            else:
+                logger.info(f"Close btn not present")                 
+
+# //button[contains( @aria-label, 'Dismiss')  and contains(@class, 'dismiss') ]            
+
+            # review_btn = driver.find_element(By.XPATH, "//button[span[contains(text(), 'Review')]]")
+            # review_btn.click()
+            return False  # break loop
+        except Exception as e:
+            logger.error(f"Exception - {e}")
+            return False  # neither found, safe to exit
+
+def process_question( question_el ):
+    input_el =question_el.find_elements(By.XPATH, f".//input")
+    if not input_el:
+        logger.info(f"No input element present")
+        select_el = question_el.find_elements(By.XPATH, f".//select")
+        if not select_el:
+            logger.info(f"No select element present")
+        else:
+            logger.info(f"Select element present")
+            label_element = select_el[0].find_element(By.XPATH, "./preceding-sibling::label[1]")
+            logger.info(f"Question for select element - {label_element.text}")
+
+            dropdown = Select(select_el[0])
+            
+            all_options = [option.text for option in dropdown.options]
+            logger.info( all_options )
+
+            dropdown.select_by_visible_text(all_options[1])
+            logger.info(f"Selected option - '{ all_options[1] }'" )
+
+
+    else:
+        logger.info(f"Input element present")
+
+        #check if checkbox
+        input_el_class = input_el[0].get_attribute("class")
+        logger.info(f"Class - {input_el_class}")
+
+        if "checkbox" in input_el_class:
+            logger.info(f"Radio button question")
+            fieldset = input_el[0].find_element(By.XPATH, "./ancestor::fieldset")
+            legend = fieldset.find_element(By.TAG_NAME, "legend")
+            logger.info(f"Question - {legend.text}")
+            labels = fieldset.find_elements(By.TAG_NAME, "label")
+            for label in labels:
+                logger.info(f"Option - {label.text}")
+                if label.text.lower() == "yes":
+                    label.click()
+                    logger.info(f"Clicked on radio button label - '{label.text}'")
+                    break
+
+        else:
+            total_exp_in_years = config["linkedin_config"]["total_exp_in_years"]
+            current_ctc_in_years = config["linkedin_config"]["current_ctc_in_years"]
+            expected_ctc_in_years = config["linkedin_config"]["expected_ctc_in_years"]            
+            notice_in_days = config["linkedin_config"]["notice_in_days"]  
+            rating = config["linkedin_config"]["rating"] 
+
+            label = input_el[0].find_element(By.XPATH, f"./preceding-sibling::label" )
+            logger.info(f"Label text - {label.text}")
+
+            ip_value = input_el[0].get_attribute("value")
+            if ip_value and ip_value.strip():
+                logger.info(f"Input element already have value - '{ip_value}'")
+            else:
+                logger.info(f"Input element already does not have value, so adding value")
+
+                if "how many years" in label.text.lower() or "experience" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys(total_exp_in_years)
+                elif "current ctc" in label.text.lower() or "fixed" in label.text.lower() or "current compensation" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys(current_ctc_in_years)
+                elif "expected ctc" in label.text.lower() or "expected" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys(expected_ctc_in_years)
+                elif "notice period" in label.text.lower() or "notice" in label.text.lower() or "how soon" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys(notice_in_days)
+                elif "rating" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys(rating)
+                elif "not referred" in label.text.lower():
+                    input_el[0].clear()
+                    input_el[0].send_keys("N/A")                
 
 def run_job_apply_for_linkedin():
     try:
         logger.info(f"Start - run_job_apply_for_linkedin()")
-        driver.get(f"https://linkedin.com")
-        # time.sleep(100000)
+        linkedin_url =  config["job_apply_config"]["linkedin_url"]
+        logger.info(f"Linkedin URL - '{linkedin_url}'")
+        
+        driver.get(linkedin_url)
         li_xpaths = config["linkedin_xpaths"]
         
-        check_if_already_loggedin()
-# //*[@id="ember16"]
-        driver.find_element(By.XPATH, li_xpaths["sign_in"] ).click()
+        already_loggedin = check_if_already_loggedin( li_xpaths )
+        if already_loggedin:
+            logger.info(f"Already logged in..")
+        else:
+            logger.warning(f"Not already logged in... login required")
+            if linkedin_login( li_xpaths ):
+                logger.info(f"Start of job apply actions for linkedin")
+                click("Job button", li_xpaths["jobs_menu"], driver)
+                job_search_keywords = config["linkedin_config"]["job_search_keywords"]
+                logger.info(f"Linkedin job search keywords - '{job_search_keywords}'")
+                driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(job_search_keywords)
+                driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(Keys.ENTER)
+                driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
+                driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
+                time.sleep(3)
+                listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                wait = WebDriverWait(driver, 20)
+                logger.info(f"Total jobs - {len(listed_jobs_ul)}")
 
+                index = 1
+                while True:
+                    logger.info(f"Processing job number - {index} from current page")
+                    try:
+                        listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                        logger.info(f"Total jobs - {len(listed_jobs_ul)}")                    
+                        if len(listed_jobs_ul) == index+1:
+                            logger.info(f"Last job on this page")
+                            continue
+
+                        logger.info(f"Job number - {index}")
+                                    
+                        try:
+                            job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                        except Exception as e:
+                            job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+
+                        driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                        logger.info(f"Scrolled into view")
+                        job_box_text = job_li_el.text
+                        job_li_el.click()
+                        logger.info(f"Clicked on job record")
+                        time.sleep(2)
+
+                        easy_apply_buttons = driver.find_elements( By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]" )
+
+                        if len(easy_apply_buttons) < 1:                    
+                            logger.warning(f"No easy apply btn, probably applied for this job already")        
+                            logger.warning(f"Already applied for this job")
+                            index = index + 1
+                            continue
+                        easy_apply_buttons[0].click()
+
+                        logger.info(f"Clicked on easy apply button")                
+                        time.sleep(1)
+                        while_loop_count = 0
+                        logger.info(f"while_loop_count - {while_loop_count}")
+                        continue_with_questions = False
+
+                        while True:
+                            popup_headings = driver.find_elements( By.XPATH, f"//h3[contains( @class, 't-16' )]" )
+                            if len(popup_headings) > 0:
+                                logger.info(f"Heading text - {popup_headings[0].text}")
+                                if popup_headings[0].text.lower().strip() == "contact info":
+                                    logger.info(f"On contact info page")
+                                    should_continue = click_next_or_review()
+                                    if not should_continue:
+                                        break                                    
+
+                                elif popup_headings[0].text.lower().strip() == "resume":
+                                    logger.info(f"On resume info page")                   
+                                    should_continue = click_next_or_review()
+                                    if not should_continue:
+                                        break                                    
+
+                                else:
+                                    logger.info(f"On unknown heading page - '{popup_headings[0].text}'")  
+                                    continue_with_questions = True
+                            else:
+                                logger.info(f"No heading - continue to check for questions")
+                                continue_with_questions = True
+
+                            if continue_with_questions:
+                                questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
+                                logger.info(f"Quesstion's count - {len(questions_el)}")                            
+                                logger.info(f"while_loop_count - {while_loop_count + 1}")
+
+                                for question_el in questions_el:
+                                    process_question( question_el )
+
+                                should_continue = click_next_or_review()
+                                if not should_continue:
+                                    break
+
+                        logger.info(f"job_box_text -  {job_box_text}")                
+                        index = index + 1
+
+                        next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
+                        if next_job_el:
+                            logger.info(f"Next job is available loop will continue")
+                        else:
+                            logger.info(f"Next job is not available loop will break")
+                            print(f"Next job is not available loop will break")
+                            time.sleep(100)
+                            break
+
+                    except StaleElementReferenceException:
+                        index = index + 1
+                        logger.warning(f"stale el")
+                        job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                        job_box_text = job_li_el.text
+                        logger.info(job_box_text)
+                        driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                        job_li_el.click()
+                        time.sleep(2)
+                        logger.info(f"Scrolled into view -s")                
+                    except Exception as e:
+                        index = index + 1
+                        logger.error(f"Error - {e}")        
+            else:
+                logger.error(f"Login failed")
 
     except Exception as e:
-        logger.error(f"Failed in - run_job_apply_for_linkedin()")
+        logger.error(f"Failed in - run_job_apply_for_linkedin() - {e}")
+        raise e
 
 if __name__ == "__main__":
-    # logger =None
+
     sender_email=None 
     receiver_email=None
     sender_pwd=None
     smtp_server_name=None 
     smtp_server_port=None
-    
+    driver = None
+
     logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     config = configparser.ConfigParser()
     config.read('./job_apply.conf')
-
     browser_choice = get_browser_from_args()
 
     if browser_choice.lower() == "edge":
-        kill_edge()
-        edge_driver_path = r'C:\Users\Admin\Documents\Swapnil\PP\personal_projects\Naukri_automation\driver\msedgedriver.exe'
-
-        # Set up Edge options (optional)
-        # edge_options = Options()
-        # edge_options.use_chromium = True
+        kill_browser(browser_choice)
+        # edge_driver_path = r'C:\Users\Admin\Documents\Swapnil\PP\personal_projects\Naukri_automation\driver\msedgedriver.exe'
+        edge_driver_path = config["job_apply_config"]["edgedriver_path"]
+        logger.info(f"Driver path used -  {edge_driver_path}")
         service = Service(executable_path=edge_driver_path)
-        # driver = webdriver.Edge(service=service, options=edge_options)
         driver = webdriver.Edge(service=service)    
 
-
-
     else:    
-        os.system("taskkill /im chrome.exe /f")
-
+        kill_browser(browser_choice)
         webdriver_path = config["job_apply_config"]["webdriver_path"]
         chrome_options = Options()
 
@@ -359,20 +638,13 @@ if __name__ == "__main__":
         chrome_options.add_argument(f"--disable-dev-shm-usage")
         chrome_options.add_argument(f"--disable-extensions")
 
-        # chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
-        # profile_dir = "Default"  # or "Profile 1", "Profile 2", etc.
-        # service = Service(ChromeDriverManager().install())
-
         service = Service(webdriver_path)
         logging.info("Service set")
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
-
     logging.info("Driver set")
-    # driver.get("https://www.linkedin.com")
     driver.maximize_window()
-    driver.implicitly_wait(10)
-
+    driver.implicitly_wait(30)
     load_dotenv()
 
     job_search_platforms = config["job_apply_config"]["job_search_platforms"].split(",")
@@ -391,11 +663,13 @@ if __name__ == "__main__":
                 run_job_apply_automation( platform = job_search_platform)
             elif job_search_platform.lower() == "linkedin":
                 run_job_apply_automation( platform = job_search_platform)
-
             else:
                 logger.warning(f"Unknown job search platform  - '{job_search_platform}'")
 
     except Exception as e:
+        if driver:
+            take_full_screenshot(driver, filename="screenshot.png")
+
         if logger is not None:
             logger.info(f"Exception - {e}")
         if sender_email and receiver_email and sender_pwd and smtp_server_name and smtp_server_port:

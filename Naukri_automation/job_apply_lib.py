@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email import encoders
 from email.mime.base import MIMEBase
+from selenium.webdriver.common.by import By
 
 
 logger = logging.getLogger(__name__)
@@ -118,3 +119,23 @@ def kill_edge():
         logger.info("All Edge processes killed.")
     except subprocess.CalledProcessError as e:
         logger.warning("No Edge processes found or already closed.")
+
+def kill_chrome():
+    try:
+        os.system("taskkill /im chrome.exe /f")
+        # This command forcibly kills all Microsoft Edge processes
+        # subprocess.run("taskkill /F /IM msedge.exe", check=True, shell=True)
+        # subprocess.run("taskkill /F /IM msedgedriver.exe", check=True, shell=True)
+        logger.info("All Chromem processes killed.")
+    except subprocess.CalledProcessError as e:
+        logger.warning("No Chrome processes found or already closed.")
+
+
+def click( element_name , xpath, driver):
+    try:
+        logger.info(f"Start click for '{element_name}' ")
+        driver.find_element(By.XPATH, xpath).click()
+        logger.info(f"Clicked successfully")
+    except Exception as e:
+        logger.error(f"Failed in - click() -  {e}")
+        raise Exception(e)
