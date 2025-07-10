@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 global pdf
 
+def kill_browser(browser_choice):
+    if browser_choice == "edge":
+        kill_edge()
+    elif browser_choice == "chrome":
+        kill_chrome()
+
 def validate_job_title( job_title, keywords_list_for_job_title ):
     logger.info(f"In validate job function")
 

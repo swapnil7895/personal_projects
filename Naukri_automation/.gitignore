@@ -5,3 +5,9 @@ __pycache__/
 .env
 driver/msedgedriver.exe
 
+
+
+build/
+builds/
+dist/
+job_apply.spec

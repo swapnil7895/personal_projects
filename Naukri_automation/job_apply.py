@@ -9,6 +9,9 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.edge.service import Service as EService
+
+
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
@@ -20,6 +23,10 @@ import subprocess
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import sys
+from msedge.selenium_tools import Edge, EdgeOptions
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
+
+
 
 def take_full_screenshot(driver, filename="screenshot.png"):
     """
@@ -34,13 +41,6 @@ def take_full_screenshot(driver, filename="screenshot.png"):
         logger.info(f"Screenshot saved as {filename}")
     else:
         logger.error("Failed to take screenshot.")
-
-
-def kill_browser(browser_choice):
-    if browser_choice == "edge":
-        kill_edge()
-    elif browser_choice == "chrome":
-        kill_chrome()
 
 def get_browser_from_args(default="edge"):
     # Check if a browser argument is passed
@@ -243,7 +243,6 @@ def run_job_apply_for_naukri():
                                 except Exception as e:
                                     logging.info(f"Apply success message is not there, checking chatbot popup")
 
-                                # //*[@class = "apply-message"]
                                 logging.info(f"Checking if chatbot popup present")
                                 try:
                                     chatbot_popup_el = driver.find_element(By.XPATH, xpaths["chatbot_popup_window"])
@@ -363,8 +362,6 @@ def click_next_or_review():
         else:
             raise Exception(f"No next button present")
 
-        # next_btn = driver.find_element(By.XPATH, "//button[span[text()='Next']]")
-        # next_btn.click()
     except:
         try:
             ## check if submit application btn is there - if yes click
@@ -374,7 +371,6 @@ def click_next_or_review():
                 submit_appl_btns[0].click()
                 logger.info(f"Clicked on Submit application btn")
             else:
-                ###
                 driver.find_element(By.XPATH, f"//button[ contains( @aria-label, 'Review your application' ) ]" ).click()                
                 logger.info(f"Clicked on review button")
                 driver.find_element(By.XPATH, f"//button[contains(@aria-label, 'Submit application' ) ]" ).click()
@@ -386,8 +382,6 @@ def click_next_or_review():
                 logger.info(f"Clicked on done btn") 
             else:
                 logger.info(f"Done btn not present") 
-
-            # driver.find_element(By.XPATH, f"//button//span[ text() = 'Done']" ).click()                
             
             close_popup_btns = driver.find_elements( By.XPATH, f"//button[contains( @aria-label, 'Dismiss')  and contains(@class, 'dismiss') ]")
             if len(close_popup_btns) > 0:
@@ -396,10 +390,6 @@ def click_next_or_review():
             else:
                 logger.info(f"Close btn not present")                 
 
-# //button[contains( @aria-label, 'Dismiss')  and contains(@class, 'dismiss') ]            
-
-            # review_btn = driver.find_element(By.XPATH, "//button[span[contains(text(), 'Review')]]")
-            # review_btn.click()
             return False  # break loop
         except Exception as e:
             logger.error(f"Exception - {e}")
@@ -479,14 +469,174 @@ def process_question( question_el ):
                     elif "not referred" in label.text.lower():
                         input_el[0].clear()
                         input_el[0].send_keys("N/A")                
+                    else:
+                        logger.info(f"Unknown question - filling total experience value")
+                        input_el[0].clear()
+                        input_el[0].send_keys(total_exp_in_years)
+
+
+
     except Exception as e:
         logger.error(f"Exception in process_question() - {e}")
         raise e
 
-def run_job_apply_for_linkedin():
+def linkedin_jobapply_actions( li_xpaths):
     try:
         success_job_list = []
         failed_job_list = []
+
+        logger.info(f"Start of job apply actions for linkedin")
+        click("Job button", li_xpaths["jobs_menu"], driver)
+        job_search_keywords = config["linkedin_config"]["job_search_keywords"]
+        logger.info(f"Linkedin job search keywords - '{job_search_keywords}'")
+        driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(job_search_keywords)
+        driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(Keys.ENTER)
+        logger.info(f"Entered job search keywords")
+
+        driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
+        logger.info(f"Clicked on easy apply filter")
+
+
+        driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
+        time.sleep(3)
+        listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+        wait = WebDriverWait(driver, 20)
+        logger.info(f"Total jobs - {len(listed_jobs_ul)}")
+
+        index = 1
+        ## Loop for per job processing
+        while True:
+            logger.info(f"Processing job number - {index} from current page")
+            try:
+                listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                logger.info(f"Total jobs - {len(listed_jobs_ul)}")
+                if len(listed_jobs_ul) == index + 1:
+                    logger.info(f"Last job on this page")
+                    continue
+
+                logger.info(f"Job number - {index}")
+
+                try:
+                    job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                except Exception as e:
+                    logger.warning(f"Exception while searching job element -{e}")
+                    logger.warning(f"Trying again to get it")
+                    job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+
+                driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                logger.info(f"Scrolled into view")
+                job_box_text = job_li_el.text
+                job_li_el.click()
+                logger.info(f"Clicked on job record - '{job_box_text}'")
+                time.sleep(2)
+
+                already_applied_btns = driver.find_elements( By.XPATH, "//div/span[  contains( @class, 'artdeco-inline-feedback' ) ]" )
+                if len( already_applied_btns) > 0:
+                    logger.warning(f"Job is already "+ already_applied_btns[0].text)
+                    index = index + 1
+                    continue
+
+                easy_apply_buttons = driver.find_elements( By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]" )
+
+                if len(easy_apply_buttons) < 1:                    
+                    logger.warning(f"No easy apply btn, probably applied for this job already")        
+                    logger.warning(f"Already applied for this job")
+                    index = index + 1
+                    continue
+                easy_apply_buttons[0].click()
+                logger.info(f"Clicked on easy apply button")                                        
+                time.sleep(1)
+
+                while_loop_count = 0
+                logger.info(f"while_loop_count - {while_loop_count}")
+                continue_with_questions = False
+
+                ## while loop for questions popup box
+                while True:
+                    try:
+
+                        popup_headings = driver.find_elements( By.XPATH, f"//h3[contains( @class, 't-16' )]" )
+                        if len(popup_headings) > 0:
+                            logger.info(f"Heading text - {popup_headings[0].text}")
+                            if popup_headings[0].text.lower().strip() == "contact info":
+                                logger.info(f"On contact info page")
+                                continue_with_questions = True
+
+                                # should_continue = click_next_or_review()
+                                # if not should_continue:
+                                #     break                                    
+
+                            elif popup_headings[0].text.lower().strip() == "resume":
+                                logger.info(f"On resume info page")                   
+                                should_continue = click_next_or_review()
+                                if not should_continue:
+                                    break
+
+                            else:
+                                logger.info(f"On unknown heading page - '{popup_headings[0].text}'")  
+                                continue_with_questions = True
+                        else:
+                            logger.info(f"No heading - continue to check for questions")
+                            continue_with_questions = True
+
+                        if continue_with_questions:
+                            questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
+                            logger.info(f"Quesstion's count - {len(questions_el)}")                            
+                            logger.info(f"while_loop_count - {while_loop_count + 1}")
+
+                            for question_el in questions_el:
+                                process_question( question_el )
+
+                            should_continue = click_next_or_review()
+                            if not should_continue:
+                                success_job_list.append( job_box_text )
+                                break
+
+                    except Exception as e:
+                        logger.error(f"Exception while working on questions popup of job - '{e}'")
+                        driver.find_element(By.XPATH,"//button[ contains( @aria-label, 'Dismiss') and contains(@class,'__dismiss') ]" ).click()
+                        logger.info(f"Clicked on close btn")
+                        driver.find_element(By.XPATH,"//button[ contains( @class, 'confirm-dialog-btn') ]/span[   text()= 'Discard' ]" ).click()
+                        logger.info(f"Clicked on close button")                               
+                        failed_job_list.append( job_box_text ) 
+
+
+                logger.info(f"job_box_text -  {job_box_text}")                
+                index = index + 1
+
+                next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
+                if next_job_el:
+                    logger.info(f"Next job is available loop will continue")
+                else:
+                    logger.info(f"Next job is not available loop will break")
+                    print(f"Next job is not available loop will break")
+                    time.sleep(100)
+                    break
+
+            except StaleElementReferenceException as e:
+                index = index + 1
+                logger.warning(f"Stale element exception occurred - {e}")
+                job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+                job_box_text = job_li_el.text
+                logger.info(job_box_text)
+                driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+                job_li_el.click()
+                time.sleep(2)
+                logger.info(f"Scrolled into view -s")                
+            except Exception as e:
+                index = index + 1
+                logger.error(f"Error - {e}")        
+
+        return success_job_list, failed_job_list
+    
+    except Exception as e:
+        logger.error(f"Exception in - linkedin_jobapply_actions() - {e}")
+        raise e
+
+
+def run_job_apply_for_linkedin():
+    try:
+
 
         logger.info(f"Start - run_job_apply_for_linkedin()")
         linkedin_url =  config["job_apply_config"]["linkedin_url"]
@@ -501,149 +651,10 @@ def run_job_apply_for_linkedin():
         else:
             logger.warning(f"Not already logged in... login required")
             if linkedin_login( li_xpaths ):
-                logger.info(f"Start of job apply actions for linkedin")
-                click("Job button", li_xpaths["jobs_menu"], driver)
-                job_search_keywords = config["linkedin_config"]["job_search_keywords"]
-                logger.info(f"Linkedin job search keywords - '{job_search_keywords}'")
-                driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(job_search_keywords)
-                driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(Keys.ENTER)
-                logger.info(f"Entered job search keywords")
 
-                driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
-                logger.info(f"Clicked on easy apply filter")
+                success_job_list, failed_job_list = linkedin_jobapply_actions( li_xpaths )
 
 
-                driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
-                time.sleep(3)
-                listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
-                wait = WebDriverWait(driver, 20)
-                logger.info(f"Total jobs - {len(listed_jobs_ul)}")
-
-                index = 1
-                ## Loop for per job processing
-                while True:
-                    logger.info(f"Processing job number - {index} from current page")
-                    try:
-                        listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
-                        logger.info(f"Total jobs - {len(listed_jobs_ul)}")
-                        if len(listed_jobs_ul) == index + 1:
-                            logger.info(f"Last job on this page")
-                            continue
-
-                        logger.info(f"Job number - {index}")
-                                    
-                        try:
-                            job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
-                        except Exception as e:
-                            logger.warning(f"Exception while searching job element -{e}")
-                            logger.warning(f"Trying again to get it")
-                            job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
-
-                        driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
-                        logger.info(f"Scrolled into view")
-                        job_box_text = job_li_el.text
-                        job_li_el.click()
-                        logger.info(f"Clicked on job record - '{job_box_text}'")
-                        time.sleep(2)
-
-                        already_applied_btns = driver.find_elements( By.XPATH, "//div/span[  contains( @class, 'artdeco-inline-feedback' ) ]" )
-                        if len( already_applied_btns) > 0:
-                            logger.warning(f"Job is already "+ already_applied_btns[0].text)
-                            index = index + 1
-                            continue
-
-                        easy_apply_buttons = driver.find_elements( By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]" )
-
-                        if len(easy_apply_buttons) < 1:                    
-                            logger.warning(f"No easy apply btn, probably applied for this job already")        
-                            logger.warning(f"Already applied for this job")
-                            index = index + 1
-                            continue
-                        easy_apply_buttons[0].click()
-                        logger.info(f"Clicked on easy apply button")                                        
-                        time.sleep(1)
-
-                        while_loop_count = 0
-                        logger.info(f"while_loop_count - {while_loop_count}")
-                        continue_with_questions = False
-
-                        ## while loop for questions popup box
-                        while True:
-                            try:
-
-                                popup_headings = driver.find_elements( By.XPATH, f"//h3[contains( @class, 't-16' )]" )
-                                if len(popup_headings) > 0:
-                                    logger.info(f"Heading text - {popup_headings[0].text}")
-                                    if popup_headings[0].text.lower().strip() == "contact info":
-                                        logger.info(f"On contact info page")
-                                        continue_with_questions = True
-
-                                        # should_continue = click_next_or_review()
-                                        # if not should_continue:
-                                        #     break                                    
-
-                                    elif popup_headings[0].text.lower().strip() == "resume":
-                                        logger.info(f"On resume info page")                   
-                                        should_continue = click_next_or_review()
-                                        if not should_continue:
-                                            break
-
-                                    else:
-                                        logger.info(f"On unknown heading page - '{popup_headings[0].text}'")  
-                                        continue_with_questions = True
-                                else:
-                                    logger.info(f"No heading - continue to check for questions")
-                                    continue_with_questions = True
-
-                                if continue_with_questions:
-                                    questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
-                                    logger.info(f"Quesstion's count - {len(questions_el)}")                            
-                                    logger.info(f"while_loop_count - {while_loop_count + 1}")
-
-                                    for question_el in questions_el:
-                                        process_question( question_el )
-
-                                    should_continue = click_next_or_review()
-                                    if not should_continue:
-                                        success_job_list.append( job_box_text )
-                                        break
-
-                            except Exception as e:
-                                logger.error(f"Exception while working on questions popup of job - '{e}'")
-                                driver.find_element(By.XPATH,"//button[ contains( @aria-label, 'Dismiss') and contains(@class,'__dismiss') ]" ).click()
-                                logger.info(f"Clicked on close btn")
-                                driver.find_element(By.XPATH,"//button[ contains( @class, 'confirm-dialog-btn') ]/span[   text()= 'Discard' ]" ).click()
-                                logger.info(f"Clicked on close button")                               
-                                failed_job_list.append( job_box_text ) 
-
-
-                        logger.info(f"job_box_text -  {job_box_text}")                
-                        index = index + 1
-
-                        next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
-                        if next_job_el:
-                            logger.info(f"Next job is available loop will continue")
-                        else:
-                            logger.info(f"Next job is not available loop will break")
-                            print(f"Next job is not available loop will break")
-                            time.sleep(100)
-                            break
-
-                    except StaleElementReferenceException as e:
-                        index = index + 1
-                        logger.warning(f"Stale element exception occurred - {e}")
-                        job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
-                        job_box_text = job_li_el.text
-                        logger.info(job_box_text)
-                        driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
-                        job_li_el.click()
-                        time.sleep(2)
-                        logger.info(f"Scrolled into view -s")                
-                    except Exception as e:
-                        index = index + 1
-                        logger.error(f"Error - {e}")        
-
-                return success_job_list, failed_job_list
             else:
                 logger.error(f"Login failed")
 
@@ -668,11 +679,16 @@ if __name__ == "__main__":
 
     if browser_choice.lower() == "edge":
         kill_browser(browser_choice)
-        # edge_driver_path = r'C:\Users\Admin\Documents\Swapnil\PP\personal_projects\Naukri_automation\driver\msedgedriver.exe'
-        edge_driver_path = config["job_apply_config"]["edgedriver_path"]
-        logger.info(f"Driver path used -  {edge_driver_path}")
-        service = Service(executable_path=edge_driver_path)
-        driver = webdriver.Edge(service=service)    
+
+        service = Service( EdgeChromiumDriverManager().install() )        
+        driver = webdriver.Edge( service = service )
+
+        ##below is working code to launch edge browser by giving driver path explicitely
+
+        # edge_driver_path = config["job_apply_config"]["edgedriver_path"]
+        # logger.info(f"Driver path used -  {edge_driver_path}")
+        # service = Service(executable_path=edge_driver_path)
+        # driver = webdriver.Edge(service=service)    
 
     else:    
         kill_browser(browser_choice)
