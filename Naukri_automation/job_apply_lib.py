@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email import encoders
 from email.mime.base import MIMEBase
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import StaleElementReferenceException
 
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,85 @@ def click( element_name , xpath, driver):
         logger.info(f"Start click for '{element_name}' ")
         driver.find_element(By.XPATH, xpath).click()
         logger.info(f"Clicked successfully")
+    except StaleElementReferenceException as e:
+        try:
+            logger.warning(f"Exception - '{e}'")
+            logger.warning(f"Trying again")
+            driver.find_element(By.XPATH, xpath).click()
+            logger.info(f"Clicked successfully")
+
+        except Exception as e:
+            logger.error(f"Exception again - '{e}'")
+            raise e
+
     except Exception as e:
         logger.error(f"Failed in - click() -  {e}")
         raise Exception(e)
+
+
+def send_input( element_name , xpath, driver, keys):
+    try:
+        logger.info(f"Start send input for '{element_name}' ")
+        driver.find_element(By.XPATH, xpath).send_keys(keys)
+        logger.info(f"Sent keys successfully")
+
+    except StaleElementReferenceException as e:
+        try:
+            logger.warning(f"Exception - '{e}'")
+            logger.warning(f"Trying again")
+            driver.find_element(By.XPATH, xpath).send_keys(keys)
+            logger.info(f"Sent keys successfully")
+        except Exception as e:
+            logger.error(f"Exception again - '{e}'")
+            raise e
+
+    except Exception as e:
+        logger.error(f"Failed in - send_input() -  {e}")
+        raise Exception(e)
+
+
+def js_scroll_to_element( element_name, driver, xpath ):
+    try:
+        logger.info(f"Start js_scroll_to_element '{element_name}' ")
+        driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, xpath ) )
+        logger.info(f"Scrolled into view successfully")
+
+    except StaleElementReferenceException as e:
+        try:
+            logger.warning(f"Exception - '{e}'")
+            logger.warning(f"Trying again")
+            driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, xpath ) )
+            logger.info(f"Scrolled into view successfully")
+
+        except Exception as e:
+            logger.error(f"Exception again - '{e}'")
+            raise e
+
+    except Exception as e:
+        logger.error(f"Failed in - js_scroll_to_element() -  {e}")
+        raise Exception(e)
+
+
+def get_elements( element_name, driver, xpath ):
+    try:
+        logger.info(f"Start get_elements for '{element_name}' ")
+        elements = driver.find_elements(By.XPATH, xpath)
+        logger.info(f"Fetched elements successfully")
+        return elements
+
+    except StaleElementReferenceException as e:
+        try:
+            logger.warning(f"Exception - '{e}'")
+            logger.warning(f"Trying again")
+            elements = driver.find_elements(By.XPATH, xpath)
+            logger.info(f"Fetched elements successfully")
+            return elements
+
+        except Exception as e:
+            logger.error(f"Exception again - '{e}'")
+            raise e
+
+    except Exception as e:
+        logger.error(f"Failed in - js_scroll_to_element() -  {e}")
+        raise Exception(e)
+

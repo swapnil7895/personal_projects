@@ -10,8 +10,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.edge.service import Service as EService
-
-
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
@@ -74,10 +72,15 @@ def linkedin_login( li_xpaths ):
         password = config["linkedin_config"]["login_password"]
 
         logger.info(f"Start - linkedin_login( li_xpaths )")
-        driver.find_element(By.XPATH, li_xpaths["sign_in"] ).click()
+        # driver.find_element(By.XPATH, li_xpaths["sign_in"] ).click()
+        click( "sign in btn" , li_xpaths["sign_in"], driver)
+
+
         driver.find_element(By.XPATH, li_xpaths["email_or_phone_input"]).send_keys(username)
         driver.find_element(By.XPATH, li_xpaths["pwd_input"]).send_keys(password)
-        driver.find_element(By.XPATH, li_xpaths["sign_in_btn"]).click()  
+        # driver.find_element(By.XPATH, li_xpaths["sign_in_btn"]).click()  
+        click( "sign in btn" , li_xpaths["sign_in_btn"], driver)
+
 
         logged_in = check_if_already_loggedin(li_xpaths)
         if logged_in:
@@ -122,11 +125,13 @@ def run_job_apply_for_naukri():
         logging.info("URL Launched")
         # driver.execute_script("window.stop();")\\\
 
-        driver.find_element(By.XPATH, xpaths["jobs_btn"]).click()
-        logging.info("Clicked on 'jobs' button")
+        # driver.find_element(By.XPATH, xpaths["jobs_btn"]).click()
+        click( "jobs btn" , xpaths["jobs_btn"], driver)
 
-        driver.find_element(By.XPATH, xpaths["search_jobs_here_btn"]).click()
-        logging.info("Clicked on 'Search jobs here' button")
+
+        # driver.find_element(By.XPATH, xpaths["search_jobs_here_btn"]).click()
+        click( "search jobs here btn" , xpaths["search_jobs_here_btn"], driver)
+
         driver.find_element(By.XPATH, xpaths["jobsearch_textarea"]).send_keys(f"{keywords_to_search}")
         logging.info(f"Entered text '{keywords_to_search}'")
       
@@ -142,10 +147,11 @@ def run_job_apply_for_naukri():
 
         if config["naukri_config"]["sort_jobs_by_date"].lower() == "true":
             logging.info(f"Sorting jobs by date")
-            driver.find_element(By.XPATH, xpaths["sort_filter_btn"]).click()
-            logging.info(f"Clicked on sort FILTER")
-            driver.find_element(By.XPATH, xpaths["sort_filter_date_field"]).click()
-            logging.info(f"Clicked on DATE item from DROPDOWN")
+            # driver.find_element(By.XPATH, xpaths["sort_filter_btn"]).click()
+            click( "sort filter btn" , xpaths["sort_filter_btn"], driver)
+
+            # driver.find_element(By.XPATH, xpaths["sort_filter_date_field"]).click()
+            click( "sort filter btn" , xpaths["sort_filter_date_field"], driver)
         else:
             logger.info(f"Keeping default sort job filter")    
         
@@ -216,8 +222,10 @@ def run_job_apply_for_naukri():
                         if "just now" in job_days_old or "few hours ago" in job_days_old or "days ago" in job_days_old or "day ago"  in job_days_old:
                             logging.info(f"Job '{job_title}' is posted - {job_days_old}") 
                             # driver.find_element(By.XPATH, r'(//div[ @class = "srp-jobtuple-wrapper"]//*[ @class = " row1"]/a)['+str(i)+']').click()
-                            driver.find_element(By.XPATH, each_job_dtls_xpath_row6).click()
-                            logging.info(f"Clicked on job - '{job_title}'")
+                            # driver.find_element(By.XPATH, each_job_dtls_xpath_row6).click()
+                            click( "Each job dtls" , each_job_dtls_xpath_row6, driver)
+
+                            # logging.info(f"Clicked on job - '{job_title}'")
                             window_handles = driver.window_handles
                             driver.switch_to.window( window_handles[1] )
 
@@ -480,6 +488,94 @@ def process_question( question_el ):
         logger.error(f"Exception in process_question() - {e}")
         raise e
 
+def jobapply_perjob(index):
+    try:
+        # wait = WebDriverWait(driver, 20)        
+        try:
+            job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+        except Exception as e:
+            logger.warning(f"Exception while searching job element -{e}")
+            logger.warning(f"Trying again to get it")
+            job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
+
+        driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
+        logger.info(f"Scrolled into view")
+        job_box_text = job_li_el.text
+        job_li_el.click()
+        logger.info(f"Clicked on job record - '{job_box_text}'")
+        time.sleep(2)
+
+        already_applied_btns = driver.find_elements( By.XPATH, "//div/span[  contains( @class, 'artdeco-inline-feedback' ) ]" )
+        if len( already_applied_btns) > 0:
+            logger.warning(f"Job is already "+ already_applied_btns[0].text)
+            index = index + 1
+            return True
+
+        easy_apply_buttons = driver.find_elements( By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]" )
+
+        if len(easy_apply_buttons) < 1:                    
+            logger.warning(f"No easy apply btn, probably applied for this job already")        
+            logger.warning(f"Already applied for this job")
+            index = index + 1
+            return True
+        
+        easy_apply_buttons[0].click()
+        logger.info(f"Clicked on easy apply button")                                        
+        time.sleep(1)
+
+        while_loop_count = 0
+        logger.info(f"while_loop_count - {while_loop_count}")
+        continue_with_questions = False
+
+        ## while loop for questions popup box
+        while True:
+            try:
+                popup_headings = driver.find_elements( By.XPATH, f"//h3[contains( @class, 't-16' )]" )
+                if len(popup_headings) > 0:
+                    logger.info(f"Heading text - {popup_headings[0].text}")
+                    if popup_headings[0].text.lower().strip() == "contact info":
+                        logger.info(f"On contact info page")
+                        continue_with_questions = True
+
+                    elif popup_headings[0].text.lower().strip() == "resume":
+                        logger.info(f"On resume info page")
+                        should_continue = click_next_or_review()
+                        if not should_continue:
+                            break
+                    else:
+                        logger.info(f"On unknown heading page - '{popup_headings[0].text}'")  
+                        continue_with_questions = True
+                else:
+                    logger.info(f"No heading - continue to check for questions")
+                    continue_with_questions = True
+
+                if continue_with_questions:
+                    questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
+                    logger.info(f"Quesstion's count - {len(questions_el)}")                            
+                    logger.info(f"while_loop_count - {while_loop_count + 1}")
+
+                    for question_el in questions_el:
+                        process_question( question_el )
+
+                    should_continue = click_next_or_review()
+                    if not should_continue:
+                        # success_job_list.append( job_box_text )
+                        break
+
+            except Exception as e:
+                logger.error(f"Exception while working on questions popup of job - '{e}'")
+                # driver.find_element(By.XPATH,"//button[ contains( @aria-label, 'Dismiss') and contains(@class,'__dismiss') ]" ).click()
+                click( "dismiss btn" , "//button[ contains( @aria-label, 'Dismiss') and contains(@class,'__dismiss') ]", driver)
+
+                # driver.find_element(By.XPATH,"//button[ contains( @class, 'confirm-dialog-btn') ]/span[   text()= 'Discard' ]" ).click()
+                click( "discard btn" , "//button[ contains( @class, 'confirm-dialog-btn') ]/span[   text()= 'Discard' ]", driver)
+                break
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Exception in jobapply_perjob- {e}")
+
 def linkedin_jobapply_actions( li_xpaths):
     try:
         success_job_list = []
@@ -489,18 +585,24 @@ def linkedin_jobapply_actions( li_xpaths):
         click("Job button", li_xpaths["jobs_menu"], driver)
         job_search_keywords = config["linkedin_config"]["job_search_keywords"]
         logger.info(f"Linkedin job search keywords - '{job_search_keywords}'")
-        driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(job_search_keywords)
-        driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(Keys.ENTER)
+        # driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(job_search_keywords)
+        send_input( "Job search input box" , li_xpaths["job_search_input"], driver, job_search_keywords)
+        # driver.find_element(By.XPATH, li_xpaths["job_search_input"]).send_keys(Keys.ENTER)
+        send_input( "Job search input box" , li_xpaths["job_search_input"], driver, Keys.ENTER)
+
         logger.info(f"Entered job search keywords")
 
-        driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
+        # driver.find_element(By.XPATH, r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]").click()
+        click( "Easy apply filter" , r"//*[@id='search-reusables__filters-bar']//ul/li//button[ normalize-space( . )  = 'Easy Apply' ]", driver)
+
         logger.info(f"Clicked on easy apply filter")
 
 
-        driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
+        # driver.execute_script( "arguments[0].scrollIntoView()", driver.find_element( By.XPATH, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]") )
+        js_scroll_to_element( "Job search button", driver, r"//button[ contains(@class, 'jobs-search-pagination__indicator-button--active')  ]" )
         time.sleep(3)
-        listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
-        wait = WebDriverWait(driver, 20)
+        # listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+        listed_jobs_ul = get_elements( "Job elements", driver, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul" )
         logger.info(f"Total jobs - {len(listed_jobs_ul)}")
 
         index = 1
@@ -508,103 +610,23 @@ def linkedin_jobapply_actions( li_xpaths):
         while True:
             logger.info(f"Processing job number - {index} from current page")
             try:
-                listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                # listed_jobs_ul = driver.find_elements(By.XPATH, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul")
+                listed_jobs_ul = get_elements( "Job elements", driver, r"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul" )
+
                 logger.info(f"Total jobs - {len(listed_jobs_ul)}")
                 if len(listed_jobs_ul) == index + 1:
                     logger.info(f"Last job on this page")
                     continue
 
                 logger.info(f"Job number - {index}")
-
-                try:
-                    job_li_el = wait.until( EC.presence_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
-                except Exception as e:
-                    logger.warning(f"Exception while searching job element -{e}")
-                    logger.warning(f"Trying again to get it")
-                    job_li_el = wait.until( EC.visibility_of_element_located( (By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index+1}]//*[contains(@class, 'full-width artdeco-entity-lockup__title')]") ) )
-
-                driver.execute_script("arguments[0].scrollIntoView()",job_li_el)
-                logger.info(f"Scrolled into view")
-                job_box_text = job_li_el.text
-                job_li_el.click()
-                logger.info(f"Clicked on job record - '{job_box_text}'")
-                time.sleep(2)
-
-                already_applied_btns = driver.find_elements( By.XPATH, "//div/span[  contains( @class, 'artdeco-inline-feedback' ) ]" )
-                if len( already_applied_btns) > 0:
-                    logger.warning(f"Job is already "+ already_applied_btns[0].text)
-                    index = index + 1
-                    continue
-
-                easy_apply_buttons = driver.find_elements( By.XPATH, f"//button[ contains( @class, 'jobs-apply-button') ][1]" )
-
-                if len(easy_apply_buttons) < 1:                    
-                    logger.warning(f"No easy apply btn, probably applied for this job already")        
-                    logger.warning(f"Already applied for this job")
-                    index = index + 1
-                    continue
-                easy_apply_buttons[0].click()
-                logger.info(f"Clicked on easy apply button")                                        
-                time.sleep(1)
-
-                while_loop_count = 0
-                logger.info(f"while_loop_count - {while_loop_count}")
-                continue_with_questions = False
-
-                ## while loop for questions popup box
-                while True:
-                    try:
-
-                        popup_headings = driver.find_elements( By.XPATH, f"//h3[contains( @class, 't-16' )]" )
-                        if len(popup_headings) > 0:
-                            logger.info(f"Heading text - {popup_headings[0].text}")
-                            if popup_headings[0].text.lower().strip() == "contact info":
-                                logger.info(f"On contact info page")
-                                continue_with_questions = True
-
-                                # should_continue = click_next_or_review()
-                                # if not should_continue:
-                                #     break                                    
-
-                            elif popup_headings[0].text.lower().strip() == "resume":
-                                logger.info(f"On resume info page")                   
-                                should_continue = click_next_or_review()
-                                if not should_continue:
-                                    break
-
-                            else:
-                                logger.info(f"On unknown heading page - '{popup_headings[0].text}'")  
-                                continue_with_questions = True
-                        else:
-                            logger.info(f"No heading - continue to check for questions")
-                            continue_with_questions = True
-
-                        if continue_with_questions:
-                            questions_el = wait.until( EC.presence_of_all_elements_located( (By.XPATH, f"//div[ contains( @class, 'ph5' ) ]//h3/following-sibling::div") )  )   
-                            logger.info(f"Quesstion's count - {len(questions_el)}")                            
-                            logger.info(f"while_loop_count - {while_loop_count + 1}")
-
-                            for question_el in questions_el:
-                                process_question( question_el )
-
-                            should_continue = click_next_or_review()
-                            if not should_continue:
-                                success_job_list.append( job_box_text )
-                                break
-
-                    except Exception as e:
-                        logger.error(f"Exception while working on questions popup of job - '{e}'")
-                        driver.find_element(By.XPATH,"//button[ contains( @aria-label, 'Dismiss') and contains(@class,'__dismiss') ]" ).click()
-                        logger.info(f"Clicked on close btn")
-                        driver.find_element(By.XPATH,"//button[ contains( @class, 'confirm-dialog-btn') ]/span[   text()= 'Discard' ]" ).click()
-                        logger.info(f"Clicked on close button")                               
-                        failed_job_list.append( job_box_text ) 
-
-
+                jobapply_perjob()
                 logger.info(f"job_box_text -  {job_box_text}")                
                 index = index + 1
 
-                next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
+                # next_job_el = driver.find_elements(By.XPATH, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*") 
+                next_job_el =  get_elements( "Next job element", driver, f"//*[contains(@class, 'scaffold-layout__list-detail-container') ]//div[contains(@class, 'scaffold-layout__list ') ]//ul/li[{index}]/following-sibling::*" )
+
+
                 if next_job_el:
                     logger.info(f"Next job is available loop will continue")
                 else:
@@ -712,6 +734,9 @@ if __name__ == "__main__":
     driver.implicitly_wait(10)
     load_dotenv()
 
+
+    wait = WebDriverWait(driver, 20)        
+    
     job_search_platforms = config["job_apply_config"]["job_search_platforms"].split(",")
     logger.info(f"Job search platforms - {job_search_platforms}")
 
